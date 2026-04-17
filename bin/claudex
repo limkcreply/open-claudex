@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# claudex — Claude Code CLI with local LLM support
+# https://github.com/limkcreply/open-claudex
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CLAUDEX_DIR="${CLAUDEX_DIR:-$(dirname "$SCRIPT_DIR")}"
+CLAUDEX_JS="$CLAUDEX_DIR/claudex.js"
+
+if [ ! -f "$CLAUDEX_JS" ]; then
+  echo "Error: claudex.js not found at $CLAUDEX_JS"
+  echo "Set CLAUDEX_DIR or run from the open-claudex directory"
+  exit 1
+fi
+
+export CLAUDE_CODE_USE_LOCAL=1
+
+if [ -z "$CLAUDEX_SERVER_URL" ] && [ -z "$CLAUDE_CODE_LOCAL_ENDPOINT" ]; then
+  echo "Error: No server URL set. Export CLAUDEX_SERVER_URL or CLAUDE_CODE_LOCAL_ENDPOINT"
+  echo "  e.g. export CLAUDEX_SERVER_URL=http://localhost:8080"
+  exit 1
+fi
+
+export CLAUDEX_SERVER_URL="${CLAUDEX_SERVER_URL}"
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-local-llm-key}"
+
+# Auto-detect model from server if not set
+if [ -z "$ANTHROPIC_MODEL" ]; then
+  SERVER_URL="${CLAUDEX_SERVER_URL:-$CLAUDE_CODE_LOCAL_ENDPOINT}"
+  DETECTED=$(curl -s --max-time 3 "$SERVER_URL/v1/models" 2>/dev/null \
+    | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; print(d[0]['id'])" 2>/dev/null)
+  if [ -n "$DETECTED" ]; then
+    export ANTHROPIC_MODEL="$DETECTED"
+  else
+    echo "Error: Could not detect model from $SERVER_URL. Export ANTHROPIC_MODEL"
+    exit 1
+  fi
+fi
+
+exec node "$CLAUDEX_JS" --bare "$@"
